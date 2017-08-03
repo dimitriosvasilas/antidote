@@ -27,6 +27,7 @@
 %% API for applications
 -export([ start/0, stop/0,
           start_transaction/2,
+          search_tags/4,
           read_tags/2,
           read_objects/2,
           read_objects/3,
@@ -107,6 +108,12 @@ commit_transaction(TxId) ->
                   -> {ok, [term()]} | {error, reason()}.
 read_objects(Objects, TxId) ->
     cure:read_objects(Objects, TxId).
+
+-spec search_tags(TagKey::atom(), TagValue::atom(), Bucket::bucket(), TxId::txid())
+                    -> {ok, [term()]} | {error, reason()}.
+search_tags(TagKey, TagValue, Bucket, TxId) ->
+  IndexEntryKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('_') ++ atom_to_list(TagValue)),
+  read_objects([{IndexEntryKey, antidote_crdt_orset, Bucket}], TxId).
 
 -spec read_tags(Objects::[bound_object()], TxId::txid())
                     -> {ok, [term()]} | {error, reason()}.
