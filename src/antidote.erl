@@ -27,8 +27,10 @@
 %% API for applications
 -export([ start/0, stop/0,
           start_transaction/2,
+          read_tags/2,
           read_objects/2,
           read_objects/3,
+          update_tags/2,
           update_objects/2,
           update_objects/3,
           abort_transaction/1,
@@ -105,6 +107,31 @@ commit_transaction(TxId) ->
                   -> {ok, [term()]} | {error, reason()}.
 read_objects(Objects, TxId) ->
     cure:read_objects(Objects, TxId).
+
+-spec read_tags(Objects::[bound_object()], TxId::txid())
+                    -> {ok, [term()]} | {error, reason()}.
+read_tags([{Key, _, Bucket}], TxId) ->
+    TagObjKey = list_to_atom(atom_to_list(Key) ++ atom_to_list('/tags')),
+    read_objects([{TagObjKey, antidote_crdt_gmap, Bucket}], TxId).
+
+-spec update_tags([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
+                -> ok | {error, reason()}.
+update_tags(Updates, TxId) ->
+    UpdateList = format_update_tag_params(Updates),
+    case update_objects(UpdateList  , TxId) of
+            ok ->
+                ok;
+            {error, Reason} ->
+                {error, Reason}
+    end.
+
+  format_update_tag_params([{{Key, _, Bucket}, _, TagList} | _ ]) ->
+      TagObjKey = list_to_atom(atom_to_list(Key) ++ atom_to_list('/tags')),
+      lists:map(fun({TagK, TagV}) ->
+                                  {{TagObjKey, antidote_crdt_gmap, Bucket},
+                                  update,
+                                  {{TagK,antidote_crdt_lwwreg},{assign, TagV}}} end,
+                                  TagList).
 
 -spec update_objects([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
                     -> ok | {error, reason()}.
