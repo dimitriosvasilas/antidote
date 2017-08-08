@@ -116,6 +116,7 @@ try_store(State, #interdc_txn{dcid = DCID, timestamp = Timestamp, log_records = 
 
 %% Store the normal transaction
 try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp = Timestamp, log_records = Ops}) ->
+  proccess_Txn(Txn),
   %% The transactions are delivered reliably and in order, so the entry for originating DC is irrelevant.
   %% Therefore, we remove it prior to further checks.
   Dependencies = vectorclock:set_clock_of_dc(DCID, 0, Txn#interdc_txn.snapshot),
@@ -143,9 +144,28 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
       {update_clock(State, DCID, Timestamp), true}
   end.
 
+proccess_Txn(Txn) ->
+  {_, _, _, _, _, _, _, _, Log_records} = Txn,
+  process_log_records(Log_records),
+  ok.
+
+process_log_records([]) -> ok;
+process_log_records([H|T]) ->
+  {_, _, _, _, LogOperation} = H,
+  case LogOperation of
+    {_, _, update, _} ->
+      {_, _, _, LogPayload} = LogOperation,
+      lager:info("LogPayload~p~n~n", [LogPayload]);
+    
+    _ ->
+      ok
+  end,
+  process_log_records(T).
+
+
 handle_command({set_dependency_clock, Vector}, _Sender, State) ->
     {reply, ok, State#state{vectorclock = Vector}};
-    
+
 handle_command({txn, Txn}, _Sender, State) ->
     NewState = process_all_queues(push_txn(State, Txn)),
     {reply, ok, NewState};

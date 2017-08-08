@@ -2,7 +2,7 @@
 
 -define(ADDRESS, "localhost").
 
--define(PORT, 8087).
+-define(PORT, 8187).
 
 load(Dep) ->
     Path = filename:dirname(escript:script_name()) ++ "/../_build/test/lib/" ++ Dep ++ "/ebin",
@@ -22,33 +22,44 @@ main(_) ->
 
 test_transaction(Tries) ->
     {ok, Pid} = try_connect(10),
-    Key = <<"release_test_key">>,
-    Bound_object = {Key, antidote_crdt_counter, <<"release_test_key_bucket">>},
+    CounterKey = <<"counter_test_key">>,
+    SetKey = <<"set_test_key">>,
+    CounterObj = {CounterKey, antidote_crdt_counter, <<"release_test_key_bucket">>},
+    SetObj = {SetKey, antidote_crdt_orset, <<"release_test_key_bucket">>},
+    Key = <<"pb_client_SUITE_crdt_map_aw_test">>,
+    Bound_object = {Key, antidote_crdt_gmap, <<"bucket">>},
+
+
     io:format("Starting Test transaction~n"),
-    case antidotec_pb:start_transaction(Pid, ignore, {}) of
-        {error, Reason} when Tries > 0 ->
-            io:format("Could not start transaction: ~p~n", [Reason]),
-            timer:sleep(1000),
-            io:format("Retrying to start transaction ...~n"),
-            test_transaction(Tries - 1);
-        {ok, Tx} ->
-            io:format("Reading counter~n"),
-            case antidotec_pb:read_objects(Pid, [Bound_object], Tx) of
-                {error, Reason} when Tries > 0 ->
-                    io:format("Could not read Counter: ~p~n", [Reason]),
-                    timer:sleep(1000),
-                    io:format("Retrying to start transaction ...~n"),
-                    test_transaction(Tries - 1);
-                {ok, [Val]} ->
-                    io:format("Commiting transaction~n"),
-                    {ok, _} = antidotec_pb:commit_transaction(Pid, Tx),
-                    Value = antidotec_counter:value(Val),
-                    true = Value >= 0,
-                    _Disconnected = antidotec_pb_socket:stop(Pid),
-                    io:format("Release is working!~n"),
-                    ok
-            end
-    end.
+    {ok, Tx} = antidotec_pb:start_transaction(Pid, ignore, {}),
+
+    %io:format("Updating counter~n"),
+    %ok = antidotec_pb:update_objects(Pid, [{CounterObj, increment, 1}], Tx),
+    %io:format("Updating set~n"),
+    %ok = antidotec_pb:update_objects(Pid, [{SetObj, add, <<"a">>}], Tx),
+    io:format("Updating map~n"),
+    %ok = antidotec_pb:update_objects(Pid, [{SetObj, update, {{<<"a">>, antidote_crdt_integer}, {set, 42}}}], Tx),
+    ok = antidotec_pb:update_objects(Pid, [
+      {Bound_object, update, {{<<"a">>, antidote_crdt_lwwreg}, {assign, <<"42">>}}}], Tx),
+
+    %io:format("Reading counter~n"),
+    %{ok, [CVal]} = antidotec_pb:read_objects(Pid, [CounterObj], Tx),
+    %Value = antidotec_counter:value(CVal),
+    %io:format("Counter value ~p~n", [Value]),
+    %io:format("Reading set~n"),
+    %{ok, [SVal]} = antidotec_pb:read_objects(Pid, [SetObj], Tx),
+    %SValue = antidotec_set:value(SVal),
+    %io:format("Set value~p~n", [SValue]),
+    %io:format("Reading map~n"),
+    %{ok, [Value]} = antidotec_pb:read_values(Pid, [Bound_object], Tx),
+    %io:format("Map value~p~n", [Value]),
+
+    io:format("Commiting transaction~n"),
+    {ok, _} = antidotec_pb:commit_transaction(Pid, Tx),
+    %true = Value >= 0,
+    _Disconnected = antidotec_pb_socket:stop(Pid),
+    io:format("Release is working!~n"),
+    ok.
 
 try_connect(Tries) ->
      case antidotec_pb_socket:start(?ADDRESS, ?PORT) of
