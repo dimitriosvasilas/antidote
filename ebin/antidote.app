@@ -33,4 +33,4 @@
                         meta_data_sender_sup,mock_partition_fsm,riak_dt_mvreg,
                         stable_meta_data_server,stable_time_functions,
                         vector_orddict,vectorclock,vectorclock_vnode,
-                        wait_init,zmq_context,zmq_utils]}]}.
+                        wait_init,zmq_context,zmq_utils, tag_index_utilities]}]}.

@@ -151,21 +151,21 @@ read_tags([{Key, _, Bucket}], TxId) ->
 -spec update_tags([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
                   -> ok | {error, reason()}.
 update_tags(Updates, TxId) ->
-  UpdateList = format_update_tag_params(Updates),
-  case update_objects(UpdateList  , TxId) of
+  {_, _, CoordFsmPid} = TxId,
+  case gen_fsm:sync_send_event(CoordFsmPid, {update_tags, Updates}, ?OP_TIMEOUT) of
       ok ->
-          ok;
+          UpdateList = tag_index_utilities:format_update_tag_params(Updates),
+          case update_objects(UpdateList, TxId) of
+              ok ->
+                  ok;
+              {error, Reason} ->
+                  {error, Reason}
+          end;
+      {aborted, TxId} ->
+          {error, {aborted, TxId}};
       {error, Reason} ->
           {error, Reason}
-      end.
-
-format_update_tag_params([{{Key, _, Bucket}, _, TagList} | _ ]) ->
-  TagObjKey = list_to_atom(atom_to_list(Key) ++ atom_to_list('/tags')),
-  lists:map(fun({TagK, TagV}) ->
-                {{TagObjKey, antidote_crdt_gmap, Bucket},
-                update,
-                {{TagK,antidote_crdt_lwwreg},{assign, TagV}}} end,
-                TagList).
+  end.
 
 -spec update_objects([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
                     -> ok | {error, reason()}.

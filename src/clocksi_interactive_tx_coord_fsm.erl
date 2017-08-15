@@ -75,6 +75,7 @@
     execute_op/3,
     receive_read_objects_result/2,
     receive_logging_responses/2,
+    update_tag_op/2,
     finish_op/3,
     prepare/1,
     prepare_2pc/1,
@@ -351,7 +352,6 @@ execute_op(timeout, State = #tx_coord_state{operations = Operations, from = From
     execute_op(Operations, From, State).
 execute_op({update, Args}, Sender, SD0) ->
     execute_op({update_objects, [Args]}, Sender, SD0);
-
 execute_op({OpType, Args}, Sender,
     SD0 = #tx_coord_state{transaction = Transaction,
                           updated_partitions = Updated_partitions
@@ -383,6 +383,9 @@ execute_op({OpType, Args}, Sender,
             end,
             NewCoordState = lists:foldl(ExecuteReads, SD0#tx_coord_state{num_to_read = length(Args), return_accumulator= []}, Args),
             {next_state, receive_read_objects_result, NewCoordState#tx_coord_state{from = Sender}};
+      update_tags ->
+            {NewClientOps, NewUpdatedPartitions} = tag_index_utilities:perform_tag_update(Args, SD0, Transaction),
+            {next_state, update_tag_op, SD0#tx_coord_state{from = Sender, client_ops = NewClientOps, updated_partitions=NewUpdatedPartitions}};
 	    update_objects ->
 		    ExecuteUpdates =
                 fun({Key, Type, UpdateParams}, Acc = #tx_coord_state{updated_partitions=UpdatedPartitions, client_ops=ClientOps, internal_read_set=InternalReadSet}) ->
@@ -404,6 +407,9 @@ execute_op({OpType, Args}, Sender,
 		    end
     end.
 
+update_tag_op(_, SD0) ->
+    gen_fsm:reply(SD0#tx_coord_state.from, ok),
+    {next_state, execute_op, SD0#tx_coord_state{num_to_read = 0, return_accumulator= []}}.
 
 %% @doc This state reached after an execute_op(update_objects[Params]).
 %% update_objects calls the perform_update function, which asynchronously
