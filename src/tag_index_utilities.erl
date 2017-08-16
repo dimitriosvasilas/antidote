@@ -13,7 +13,8 @@
 
 -export([
   format_update_tag_params/1,
-  perform_tag_update/3
+  perform_tag_update/3,
+  udpate_tag_index/1
   ]).
 
 format_update_tag_params(Updates) ->
@@ -51,3 +52,23 @@ perform_tag_update(Args, SD0, Transaction) ->
                           {Node, [{{Key, Bucket}, antidote_crdt_gmap, add} | WriteSet]})
     end,
   {NewClientOps, NewUpdatedPartitions}.
+
+udpate_tag_index(Txn) ->
+  {_, _, _, _, _, _, _, _, Log_records} = Txn,
+  process_log_records(Log_records),
+  ok.
+
+process_log_records([]) -> ok;
+process_log_records([H|T]) ->
+  {_, _, _, _, LogOperation} = H,
+  case LogOperation of
+    {_, _, tag_update, _} ->
+      {_, _, _, LogPayload} = LogOperation,
+      lager:info("received tag update operation__~p~n", [LogPayload]),
+      {_,ObjKey,_,_,{_,[{TagKey,TagValue}]}} = LogPayload,
+      IndexKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('/') ++ atom_to_list(TagValue)),
+      {ok, _CT} = antidote:update_objects(ignore, [], [{{IndexKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
+    _ ->
+      ok
+  end,
+  process_log_records(T).
