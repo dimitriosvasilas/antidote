@@ -28,7 +28,7 @@
 -export([ start/0, stop/0,
          start_transaction/2,
          start_transaction/3,
-         search_tags/4,
+         search_tags/2,
          read_tags/2,
          read_objects/2,
          read_objects/3,
@@ -131,11 +131,10 @@ read_objects(BoundObjects, TxId) ->
                  end
     end.
 
--spec search_tags(TagKey::atom(), TagValue::atom(), Bucket::bucket(), TxId::txid())
+-spec search_tags(TagKey::atom(), TagValue::atom())
                   -> {ok, [term()]} | {error, reason()}.
-search_tags(TagKey, TagValue, Bucket, TxId) ->
-  IndexEntryKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('_') ++ atom_to_list(TagValue)),
-  read_objects([{IndexEntryKey, antidote_crdt_orset, Bucket}], TxId).
+search_tags(TagKey, TagValue) ->
+  tag_index_utilities:read_tag_index(TagKey, TagValue).
 
 -spec read_tags(Objects::[bound_object()], TxId::txid())
                   -> {ok, [term()]} | {error, reason()}.
