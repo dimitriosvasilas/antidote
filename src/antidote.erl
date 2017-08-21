@@ -33,7 +33,6 @@
          read_objects/2,
          read_objects/3,
          read_objects/4,
-         update_tags/2,
          update_objects/2,
          update_objects/3,
          update_objects/4,
@@ -147,26 +146,7 @@ read_tags([{Key, _, Bucket}], TxId) ->
         {error, Reason}
     end.
 
--spec update_tags([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
-                  -> ok | {error, reason()}.
-update_tags(Updates, TxId) ->
-  {_, _, CoordFsmPid} = TxId,
-  case gen_fsm:sync_send_event(CoordFsmPid, {update_tags, Updates}, ?OP_TIMEOUT) of
-      ok ->
-          UpdateList = tag_index_utilities:format_update_tag_params(Updates),
-          case update_objects(UpdateList, TxId) of
-              ok ->
-                  ok;
-              {error, Reason} ->
-                  {error, Reason}
-          end;
-      {aborted, TxId} ->
-          {error, {aborted, TxId}};
-      {error, Reason} ->
-          {error, Reason}
-  end.
-
--spec update_objects([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}}], txid())
+-spec update_objects([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}} | {bound_object(), op_name(), op_param(), atom()}], txid())
                     -> ok | {error, reason()}.
 update_objects(Updates, TxId) ->
     {_, _, CoordFsmPid} = TxId,
@@ -176,7 +156,12 @@ update_objects(Updates, TxId) ->
         Operations ->
             case gen_fsm:sync_send_event(CoordFsmPid, {update_objects, Operations}, ?OP_TIMEOUT) of
                 ok ->
-                    ok;
+                    case tag_index_utilities:update_tags(TxId, Updates) of
+                      {error, Reason} ->
+                          {error, Reason};
+                      ok ->
+                          ok
+                      end;
                 {aborted, TxId} ->
                     {error, {aborted, TxId}};
                 {error, Reason} ->
@@ -232,7 +217,7 @@ start_static_transaction(TransactionKind, ListOfOperations, StayAlive, ClientCau
 %% some systests that call updates with
 %% {Operation, Params} (as a single parameter),
 %% and Operation, Params (two separate parameters).
--spec check_and_format_ops([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(),op_param()}}]) ->
+-spec check_and_format_ops([{bound_object(), op_name(), op_param()} | {bound_object(), {op_name(), op_param()}} | {bound_object(), op_name(), op_param(), atom()}]) ->
                                 [{{key(), bucket()}, type(), {op_name(), op_param()}}] | {error, reason()}.
 check_and_format_ops(Updates) ->
     try
@@ -241,6 +226,8 @@ check_and_format_ops(Updates) ->
                 {{K, T, B}, {O, P}} ->
                     {K, T, B, {O, P}};
                 {{K, T, B}, O, P} ->
+                    {K, T, B, {O, P}};
+                {{K, T, B}, O, P, _} ->
                     {K, T, B, {O, P}}
             end,
             case materializer:check_operations([{update, {{Key, Bucket}, Type, Op}}]) of

@@ -14,30 +14,31 @@
 -export([
   format_update_tag_params/1,
   perform_tag_update/3,
-  udpate_tag_index/1,
-  read_tag_index/2
+  update_tag_index/1,
+  read_tag_index/2,
+  update_tags/2
   ]).
 
 format_update_tag_params(Updates) ->
-  [{{Key, _, Bucket}, _, TagList} | _ ] = Updates,
-  TagObjKey = list_to_atom(atom_to_list(Key) ++ atom_to_list('/tags')),
-  lists:map(fun({TagK, TagV}) ->
-                {{TagObjKey, antidote_crdt_gmap, Bucket},
+  lists:map(fun({{Key, _, Bucket}, _, _, {_, {{TagK, _},{_, TagV}}}}) ->
+                TagBucket = binary:list_to_bin(atom_to_list('_') ++ binary:bin_to_list(Bucket)),
+                {{Key, antidote_crdt_gmap, TagBucket},
                 update,
                 {{TagK,antidote_crdt_lwwreg},{assign, TagV}}} end,
-                TagList).
+                Updates).
 
 perform_tag_update(Args, SD0, Transaction) ->
-  lager:info("tag_index_utilities:perform_tag_update__Args_~p~n", [Args]),
-  {{Key, _, Bucket}, OpType, Params} = hd(Args),
-  Preflist = ?LOG_UTIL:get_preflist_from_key({Key, Bucket}),
+  {Key, Bucket, TagParams} = Args,
+  TagBucket = binary:list_to_bin(atom_to_list('_') ++ binary:bin_to_list(Bucket)),
+  TagKey = binary:list_to_bin(atom_to_list('_') ++ binary:bin_to_list(Key)),
+  Preflist = ?LOG_UTIL:get_preflist_from_key({TagKey, TagBucket}),
   TxId = Transaction#transaction.txn_id,
   LogRecord = #log_operation{tx_id = TxId, op_type = tag_update,
-  log_payload = #update_log_payload{key = Key, type = antidote_crdt_gmap, op = {OpType, Params}}},
-  LogId = ?LOG_UTIL:get_logid_from_key({Key, Bucket}),
+  log_payload = #update_log_payload{key = TagKey, type = antidote_crdt_tag, op = TagParams}},
+  LogId = ?LOG_UTIL:get_logid_from_key({TagKey, TagBucket}),
   [Node] = Preflist,
   ok = ?LOGGING_VNODE:asyn_append(Node, LogId, LogRecord, {fsm, undefined, self()}),
-  NewClientOps = [{{Key, Bucket}, antidote_crdt_gmap, {OpType, Params}} | SD0#tx_coord_state.client_ops],
+  NewClientOps = [{{TagKey, TagBucket}, antidote_crdt_tag, TagParams} | SD0#tx_coord_state.client_ops],
   WriteSet = case lists:keyfind(Node, 1, SD0#tx_coord_state.updated_partitions) of
               false ->
                 [];
@@ -47,33 +48,79 @@ perform_tag_update(Args, SD0, Transaction) ->
   NewUpdatedPartitions =
     case WriteSet of
       [] ->
-        [{Node, [{{Key, Bucket}, antidote_crdt_gmap, add}]} | SD0#tx_coord_state.updated_partitions];
+        [{Node, [{{TagKey, TagBucket}, antidote_crdt_tag, TagParams}]} | SD0#tx_coord_state.updated_partitions];
       _ ->
         lists:keyreplace(Node, 1, SD0#tx_coord_state.updated_partitions,
-                          {Node, [{{Key, Bucket}, antidote_crdt_gmap, add} | WriteSet]})
+                          {Node, [{{TagKey, TagBucket}, antidote_crdt_tag, TagParams} | WriteSet]})
     end,
   {NewClientOps, NewUpdatedPartitions}.
 
-udpate_tag_index(Txn) ->
+update_tag_index(Txn) ->
   {_, _, _, _, _, _, _, _, Log_records} = Txn,
-  process_log_records(Log_records),
-  ok.
-
-process_log_records([]) -> ok;
-process_log_records([H|T]) ->
-  {_, _, _, _, LogOperation} = H,
-  case LogOperation of
-    {_, _, tag_update, _} ->
-      {_, _, _, LogPayload} = LogOperation,
-      lager:info("received tag update operation__~p~n", [LogPayload]),
-      {_,ObjKey,_,_,{_,[{TagKey,TagValue}]}} = LogPayload,
-      IndexEntryKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('_') ++ atom_to_list(TagValue)),
-      {ok, _CT} = antidote:update_objects(ignore, [], [{{IndexEntryKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
-    _ ->
-      ok
-  end,
-  process_log_records(T).
+  try
+    lists:map(fun(LogRecord) ->
+      {_, _, _, _, LogOperation} = LogRecord,
+      case LogOperation of
+        {_, _, tag_update, _} ->
+          {_, _, _, LogPayload} = LogOperation,
+          lager:info("received tag update operation__~p~n", [LogPayload]),
+          {_, ObjKey, _, _, {_, {{TagKey, _},{_, TagValue}}}} = LogPayload,
+          lager:info("received tag update operation__~p~n_~p~n_~p~n", [ObjKey, TagKey, TagValue]),
+          IndexEntryKey = binary:list_to_bin(binary:bin_to_list(TagKey) ++ atom_to_list('_') ++ binary:bin_to_list(TagValue)),
+          lager:info("index key__~p~n", [IndexEntryKey]),
+          {ok, _CT} = antidote:update_objects(ignore, [], [{{IndexEntryKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
+        _ ->
+          ok
+        end
+      end, Log_records)
+  catch
+      _:Reason ->
+          {error, Reason}
+  end.
 
 read_tag_index(TagKey, TagValue) ->
   IndexEntryKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('_') ++ atom_to_list(TagValue)),
   antidote:read_objects(ignore, [], [{IndexEntryKey, antidote_crdt_orset, index_bucket}]).
+
+update_tags(TxId, Updates) ->
+  case format_tag_ops(Updates) of
+    {error, Reason} ->
+        {error, Reason};
+    TagOperations ->
+      case hd(TagOperations) of
+          {_, _, noop} ->
+              ok;
+          _ ->
+              {_, _, CoordFsmPid} = TxId,
+              case gen_fsm:sync_send_event(CoordFsmPid, {update_tags, hd(TagOperations)}, ?OP_TIMEOUT) of
+                ok ->
+                    UpdateList = format_update_tag_params(Updates),
+                    case antidote:update_objects(UpdateList, TxId) of
+                        ok ->
+                            ok;
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
+                {error, Reason} ->
+                    {error, Reason}
+              end
+      end
+  end.
+
+  format_tag_ops(Updates) ->
+      try
+        lists:map(fun(Update) ->
+            {Key, Bucket, TagOp} = case Update of
+              {{K, _, B}, _, _, TO} ->
+                  {K, B, TO};
+              {{K, _, B}, {_, _}} ->
+                  {K, B, noop};
+              {{K, _, B}, _, _} ->
+                  {K, B, noop}
+            end,
+            {Key, Bucket, TagOp}
+          end, Updates)
+      catch
+          _:Reason ->
+              {error, Reason}
+      end.
