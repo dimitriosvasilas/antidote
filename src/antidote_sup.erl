@@ -25,7 +25,8 @@
 
 %% API
 -export([start_link/0,
-         start_metrics_collection/0
+         start_metrics_collection/0,
+         start_divergence_metrics_collection/0
         ]).
 
 %% Supervisor callbacks
@@ -50,6 +51,14 @@ start_metrics_collection() ->
                         permanent, 5000, worker, [antidote_stats_collector]
                       },
     supervisor:start_child(?MODULE, StatsCollector).
+
+  start_divergence_metrics_collection() ->
+       DivergenceCollector = {
+                          divergence_metrics_collector,
+                          {divergence_metrics_collector, start_link, []},
+                          permanent, 5000, worker, [divergence_metrics_collector]
+                        },
+      supervisor:start_child(?MODULE, DivergenceCollector).
 
 %% ===================================================================
 %% Supervisor callbacks

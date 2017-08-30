@@ -116,7 +116,6 @@ try_store(State, #interdc_txn{dcid = DCID, timestamp = Timestamp, log_records = 
 
 %% Store the normal transaction
 try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp = Timestamp, log_records = Ops}) ->
-  tag_index_utilities:update_tag_index(Txn),
   %% The transactions are delivered reliably and in order, so the entry for originating DC is irrelevant.
   %% Therefore, we remove it prior to further checks.
   Dependencies = vectorclock:set_clock_of_dc(DCID, 0, Txn#interdc_txn.snapshot),
@@ -133,6 +132,7 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
 
     %% If so, store the transaction
     true ->
+      tag_index_utilities:update_tag_index(Txn),
       %% Put the operations in the log
       {ok, _} = logging_vnode:append_group({Partition,node()},
 					   [Partition], Ops, false),
@@ -141,8 +141,10 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
       ClockSiOps = updates_to_clocksi_payloads(Txn),
 
       ok = lists:foreach(fun(Op) -> materializer_vnode:update(Op#clocksi_payload.key, Op) end, ClockSiOps),
-      {update_clock(State, DCID, Timestamp), true}
-  end.
+      NState = update_clock(State, DCID, Timestamp),
+      divergence_metrics_collector:log(NState#state.last_updated, ClockSiOps),
+      {NState, true}
+    end.
 
 handle_command({set_dependency_clock, Vector}, _Sender, State) ->
     {reply, ok, State#state{vectorclock = Vector}};

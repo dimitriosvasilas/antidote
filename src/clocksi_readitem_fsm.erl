@@ -218,6 +218,7 @@ perform_read_internal(Coordinator,Key,Type,Transaction,PropertyList,
     PropertyList = [],
     TxId = Transaction#transaction.txn_id,
     TxLocalStartTime = TxId#tx_id.local_start_time,
+		divergence_metrics_collector:log(TxLocalStartTime, {Key, Type, Transaction}),
     case check_clock(Key,TxLocalStartTime,PreparedCache,Partition) of
 	{not_ready,Time} ->
 	    %% spin_wait(Coordinator,Key,Type,Transaction,OpsCache,SnapshotCache,PreparedCache,Self);

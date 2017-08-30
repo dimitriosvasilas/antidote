@@ -65,6 +65,13 @@ start(_StartType, _StartArgs) ->
                   ok
             end,
 
+            case application:get_env(antidote, observe_divergence) of
+              {ok, true} ->
+                  antidote_sup:start_divergence_metrics_collection();
+              _ ->
+                  ok
+            end,
+
             case application:get_env(antidote, auto_start_read_servers) of
                 {ok, true} ->
                     %% start read servers

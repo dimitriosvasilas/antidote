@@ -60,15 +60,14 @@ update_tag_index(Txn) ->
   try
     lists:map(fun(LogRecord) ->
       {_, _, _, _, LogOperation} = LogRecord,
+      {_, _, _, LogPayload} = LogOperation,
       case LogOperation of
         {_, _, tag_update, _} ->
           {_, _, _, LogPayload} = LogOperation,
-          lager:info("received tag update operation__~p~n", [LogPayload]),
           {_, ObjKey, _, _, {_, {{TagKey, _},{_, TagValue}}}} = LogPayload,
-          lager:info("received tag update operation__~p~n_~p~n_~p~n", [ObjKey, TagKey, TagValue]),
-          IndexEntryKey = binary:list_to_bin(binary:bin_to_list(TagKey) ++ atom_to_list('_') ++ binary:bin_to_list(TagValue)),
-          lager:info("index key__~p~n", [IndexEntryKey]),
-          {ok, _CT} = antidote:update_objects(ignore, [], [{{IndexEntryKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
+          lager:info("received tag update__~p~n_~p~n_~p~n", [ObjKey, TagKey, TagValue]);
+          %IndexEntryKey = binary:list_to_bin(binary:bin_to_list(TagKey) ++ atom_to_list('_') ++ binary:bin_to_list(TagValue)),
+          %{ok, _CT} = antidote:update_objects(ignore, [], [{{IndexEntryKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
         _ ->
           ok
         end
