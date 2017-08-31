@@ -114,7 +114,7 @@ handle_command({log_event, LogRecord}, _Sender, State) ->
     %% If the transaction was collected
     {ok, Ops} ->
       Txn = inter_dc_txn:from_ops(Ops, State1#state.partition, State#state.last_log_id),
-			add_latency(),
+      add_latency(),
       broadcast(State1, Txn);
     %% If the transaction is not yet complete
     none -> State1
@@ -205,8 +205,8 @@ get_stable_time(Partition) ->
     ok = clocksi_vnode:send_min_prepared(Partition).
 
 add_latency() ->
-	Scale = 100,
-  Shape = 1.1,
-	Lat = round((Scale) / (math:pow(1-rand:uniform(),1/Shape))),
-  io:format("Sleep for ~p ms before broadcast~n", [Lat]),
-	timer:sleep(Lat).
+    Scale = 100,
+    Shape = 1.1,
+    Lat = round((Scale) / (math:pow(1-rand:uniform(),1/Shape))),
+    io:format("Sleep for ~p ms before broadcast~n", [Lat]),
+    timer:sleep(Lat).
