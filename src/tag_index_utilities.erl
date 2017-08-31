@@ -14,7 +14,6 @@
 -export([
   format_update_tag_params/1,
   perform_tag_update/3,
-  update_tag_index/1,
   read_tag_index/2,
   update_tags/2
   ]).
@@ -55,30 +54,8 @@ perform_tag_update(Args, SD0, Transaction) ->
     end,
   {NewClientOps, NewUpdatedPartitions}.
 
-update_tag_index(Txn) ->
-  {_, _, _, _, _, _, _, _, Log_records} = Txn,
-  try
-    lists:map(fun(LogRecord) ->
-      {_, _, _, _, LogOperation} = LogRecord,
-      {_, _, _, LogPayload} = LogOperation,
-      case LogOperation of
-        {_, _, tag_update, _} ->
-          {_, _, _, LogPayload} = LogOperation,
-          {_, ObjKey, _, _, {_, {{TagKey, _},{_, TagValue}}}} = LogPayload,
-          lager:info("received tag update__~p~n_~p~n_~p~n", [ObjKey, TagKey, TagValue]);
-          %IndexEntryKey = binary:list_to_bin(binary:bin_to_list(TagKey) ++ atom_to_list('_') ++ binary:bin_to_list(TagValue)),
-          %{ok, _CT} = antidote:update_objects(ignore, [], [{{IndexEntryKey, antidote_crdt_orset, index_bucket}, add, ObjKey}]);
-        _ ->
-          ok
-        end
-      end, Log_records)
-  catch
-      _:Reason ->
-          {error, Reason}
-  end.
-
 read_tag_index(TagKey, TagValue) ->
-  IndexEntryKey = list_to_atom(atom_to_list(TagKey) ++ atom_to_list('_') ++ atom_to_list(TagValue)),
+  IndexEntryKey = binary:list_to_bin(binary:bin_to_list(TagKey) ++ atom_to_list('_') ++ binary:bin_to_list(TagValue)),
   antidote:read_objects(ignore, [], [{IndexEntryKey, antidote_crdt_orset, index_bucket}]).
 
 update_tags(TxId, Updates) ->

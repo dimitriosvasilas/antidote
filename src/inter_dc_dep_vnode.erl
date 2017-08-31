@@ -132,7 +132,7 @@ try_store(State, Txn=#interdc_txn{dcid = DCID, partition = Partition, timestamp 
 
     %% If so, store the transaction
     true ->
-      tag_index_utilities:update_tag_index(Txn),
+      index_manager:update_tag_index(Txn),
       %% Put the operations in the log
       {ok, _} = logging_vnode:append_group({Partition,node()},
 					   [Partition], Ops, false),

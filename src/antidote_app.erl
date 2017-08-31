@@ -72,6 +72,13 @@ start(_StartType, _StartArgs) ->
                   ok
             end,
 
+            case application:get_env(antidote, index_tags) of
+                {ok, true} ->
+                    antidote_sup:start_index_manager();
+                _->
+                    ok
+            end,
+
             case application:get_env(antidote, auto_start_read_servers) of
                 {ok, true} ->
                     %% start read servers

@@ -130,8 +130,6 @@ read_objects(BoundObjects, TxId) ->
                  end
     end.
 
--spec search_tags(TagKey::atom(), TagValue::atom())
-                  -> {ok, [term()]} | {error, reason()}.
 search_tags(TagKey, TagValue) ->
   tag_index_utilities:read_tag_index(TagKey, TagValue).
 

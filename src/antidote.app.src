@@ -55,6 +55,7 @@
   {env, [{txn_cert, false}, {txn_prot, clocksi}, {recover_from_log, false},
          {recover_meta_data_on_start, true}, {sync_log, false},
          {collect_metric_staleness, false}, {enable_logging, false},
-         {auto_start_read_servers, true}, {observe_divergence, true}
+         {auto_start_read_servers, true}, {observe_divergence, true},
+         {index_tags, true}
         ]}
  ]}.
