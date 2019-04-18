@@ -190,7 +190,6 @@ perform_singleitem_update(Clock, Key, Type, Params, Properties) ->
                         {ok, _} ->
                             case ?CLOCKSI_VNODE:single_commit_sync(UpdatedPartitions, Transaction) of
                                 {committed, CommitTime} ->
-
                                     %% Execute post commit hook
                                     case antidote_hooks:execute_post_commit_hook(Key, Type, Params1) of
                                         {error, Reason} ->
@@ -834,6 +833,7 @@ reply_to_client(State = #state{
                             end;
 
                         committed ->
+                            log_propagator:committed(Transaction, CommitTime),
                             %% Execute post_commit_hooks
                             _Result = execute_post_commit_hooks(ClientOps),
                             %% TODO: What happens if commit hook fails?
@@ -967,6 +967,11 @@ perform_read({Key, Type}, UpdatedPartitions, Transaction, Sender) ->
 perform_update(Op, UpdatedPartitions, Transaction, _Sender, ClientOps) ->
     ?PROMETHEUS_COUNTER:inc(antidote_operations_total, [update]),
     {Key, Type, Update} = Op,
+    case Type of
+        antidote_crdt_map_rr ->
+            log_propagator:perform_update(Key, Type, Transaction, Update);
+	_ -> ok
+    end,
     Partition = ?LOG_UTIL:get_key_partition(Key),
 
     WriteSet = case lists:keyfind(Partition, 1, UpdatedPartitions) of

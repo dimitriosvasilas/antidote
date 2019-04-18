@@ -15,7 +15,9 @@
                   prometheus,
                   elli,
                   elli_prometheus,
-                  prometheus_process_collector
+                  prometheus_process_collector,
+                  ctx,
+                  grpcbox
                  ]},
     {included_applications, [
         vectorclock,

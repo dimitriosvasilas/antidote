@@ -133,6 +133,12 @@ init(_Args) ->
                        permanent, 5000, worker, [antidote_stats_collector]
                      },
 
+    LogPropagator = {
+                       log_propagator,
+                       {log_propagator, start_link, []},
+                       permanent, 5000, worker, [log_propagator]
+                     },
+
     {ok,
      {{one_for_one, 5, 10},
       [StatsCollector,
@@ -155,4 +161,5 @@ init(_Args) ->
        BCounterManager,
        LogResponseReaderSup,
        PbSup,
-       Elli]}}.
+       Elli,
+       LogPropagator]}}.
